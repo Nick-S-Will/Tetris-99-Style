@@ -5,7 +5,9 @@ import java.awt.Rectangle;
 
 public class Piece {
 	private Rectangle square;
-	private int type, offsetX, offsetY;
+	private final int type;
+	private int offsetX;
+	private int offsetY;
 	
 	public Piece(Rectangle square, int type, int offsetX, int offsetY) {
 		this.square = square;
@@ -19,15 +21,15 @@ public class Piece {
 	}
 	
 	public static Color getColor(int type) {
-		switch(type) {
-		case 0: return new Color(0, 229, 249); //light blue
-		case 1: return new Color(35, 7, 225); //blue
-		case 2: return new Color(255, 110, 30); //orange
-		case 3: return new Color(250, 235, 40); //yellow
-		case 4: return new Color(100, 255, 14); //lime green
-		case 5: return new Color(148, 0, 218); //purple
-		default: return new Color(221, 12, 51); //red
-		}
+		return switch (type) {
+			case 0 -> new Color(0, 229, 249); //light blue
+			case 1 -> new Color(35, 7, 225); //blue
+			case 2 -> new Color(255, 110, 30); //orange
+			case 3 -> new Color(250, 235, 40); //yellow
+			case 4 -> new Color(100, 255, 14); //lime green
+			case 5 -> new Color(148, 0, 218); //purple
+			default -> new Color(221, 12, 51); //red
+		};
 	}
 	
 	public Rectangle getSquare() {

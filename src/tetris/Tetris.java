@@ -15,26 +15,42 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Iterator;
 
-import javax.swing.JFrame;
-import javax.swing.Timer;
+import javax.swing.*;
 
-public class Tetris implements ActionListener, KeyListener, MouseListener {
-	public static final int GRID = 35, BORDER = 4, NEXTPIECEINT = 75;
-	static JFrame F = new JFrame();
-	static Rend rend = new Rend();
-	static Tetris tet = new Tetris();
-	static Timer T;
-	ArrayList<Rectangle> ghost = new ArrayList<Rectangle>();
-	ArrayList<Piece> inFall = new ArrayList<Piece>(), landed = new ArrayList<Piece>(), nextDisplay = new ArrayList<Piece>(), holdDisplay = new ArrayList<Piece>();
-	ArrayList<Integer> next = new ArrayList<Integer>();
-	int ticks = -1, timeToNextPiece, currentFallInt = 200, fallInt = 200, currentMoveInt = 80, moveStartTick, currentType, nextType, holdType = -1, clearCount, clearLevel, lines, landCount = 1;
-	int nextOffX = 80, nextOffY = 15, holdOffX = 80, holdOffY = 55, speedUpAmount = 7, singles, doubles, triples, tetrises;
+public class Tetris extends JPanel implements ActionListener, MouseListener, KeyListener {
+	// Pixel Size of Tiles, Pixel Size of Tiles Borders
+	public static final int GRID = 35, BORDER = 4, NEW_PIECE_INTERVAL = 100;
+
+	JFrame F = new JFrame();
+	public static Tetris tet;
+	Timer T = new Timer(1, this);
+
+	// Tiles to Show Where Your Piece Will Land
+	ArrayList<Rectangle> ghost = new ArrayList<>();
+	// Tiles in Your Piece
+	ArrayList<Piece> inFall = new ArrayList<>(), landed = new ArrayList<>();
+	// Tiles to Display the Type of Next Piece
+	ArrayList<Piece> nextDisplay = new ArrayList<>(), holdDisplay = new ArrayList<>();
+	// Array of Integers that Decides the Order of the Piece Types
+	ArrayList<Integer> nextTypes = new ArrayList<>();
+
+	// Time Handling Integers
+	int ticks, timeToNextPiece, currentFallInt = 200, fallInt = 200, currentMoveInt = 80,
+			moveStartTick, speedUpAmount = 7, clearStartTick;
+	// Piece Handling Integers
+	int currentType, nextType, heldType = -1, landCount = 1;
+	// Clear Handling Integers
+	int lines, singles, doubles, triples, tetrises, clearLevel, clearCount;
+
+	// Array Holding the State of Each Space in the Grid
 	static boolean[][] spaces = new boolean[10][20];
-	boolean gameOver = false, falling = false, left = false, right = false, paused = false, canMove = true, canHold = true, canDrop = true;
+	boolean gameOver = false, falling = false, left = false, right = false, paused = false,
+			canMove = true, canHold = true, canDrop = true;
 
 	public Tetris() {
-		F.add(rend);
-		F.setTitle("Tetris");	
+		// Makes Frame
+		F.add(this);
+		F.setTitle("Tetris");
 		F.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
 		F.setSize(15 * GRID + 14, 20 * GRID + 37);
 		F.setLocationRelativeTo(null);
@@ -42,97 +58,103 @@ public class Tetris implements ActionListener, KeyListener, MouseListener {
 		F.addKeyListener(this);
 		F.addMouseListener(this);
 		F.setVisible(true);
-		T = new Timer(1, this);
-		
-		for (int i = 0;i < 7;i++) next.add(i);
-		Collections.shuffle(next);
-		nextType = next.get(0);
+
+		// Adds Piece Types to List
+		for (int i = 0;i < 7;i++) nextTypes.add(i);
+		Collections.shuffle(nextTypes);
+		nextType = nextTypes.get(0);
+
+		// Start Clock
+		T.start();
 	}
 
 	public static void main(String[] args) {
-		T.start();
+		tet = new Tetris();
 	}
 
 	@Override
 	public void actionPerformed(ActionEvent e) {
-		if (!paused && !gameOver) ticks++;
-
-		//move current piece
-		if ((ticks - moveStartTick) % currentMoveInt == 0 && canMove && !gameOver && falling) {
+		// Try Move Piece
+		if ((ticks - moveStartTick) % currentMoveInt == 0 && canMove && falling && !gameOver) {
 			if (left ^ right) {
-				int direction = 1, wall = 9;
+				int direction = right ? 1 : -1, wall = right ? 9 : 0;
 				boolean canMove = true;
 
-				if (left) {
-					direction = -1;
-					wall = 0;
-				}
-
+				// Loops If Each Tile Can Move
 				for (Piece i: inFall) {
 					Rectangle rec = i.getSquare();
-					if (rec.x == wall * GRID || spaces[rec.x / GRID + direction][rec.y / GRID]) canMove = false;
+					// If Next to Wall or Landed Piece
+					if (rec.x == wall * GRID || spaces[rec.x / GRID + direction][rec.y / GRID]) {
+						canMove = false;
+						break;
+					}
 				}
 
 				if (canMove) for (Piece i: inFall) i.move(direction, 0);
 			}
 		}
 
-		//current piece gravity
+		// Applies Gravity
 		if (ticks % currentFallInt == 0 && !gameOver) {
+			// Loops If Space Under Piece
 			for (Piece i: inFall) {
 				Rectangle rec = i.getSquare();
-				if (rec.y == 19 * GRID || spaces[rec.x / GRID][rec.y / GRID + 1]) falling = false;
+				// If Above Landed Piece
+				if (rec.y == 19 * GRID || spaces[rec.x / GRID][rec.y / GRID + 1]) {
+					falling = false;
+					break;
+				}
 			}
+
 			if (falling) for (Piece i : inFall) i.move(0, 1);
-			else if (timeToNextPiece == -1) {
-				timeToNextPiece = NEXTPIECEINT;
-			}
+			else if (timeToNextPiece == -1) timeToNextPiece = NEW_PIECE_INTERVAL;
 		}
-		
+
+		// Spawns Next Piece
 		if (timeToNextPiece == 0) {
-			for (Piece i : inFall) landed.add(i);
+			// Moves Piece to Landed Pieces
+			landed.addAll(inFall);
 			updateSpaces(true);
-			inFall = setPiece(nextType);
-			currentType = nextType;
-			nextType = next.get(landCount);
-			
-			nextDisplay = setPiece(nextType);
-			for (Piece i: nextDisplay) i.getSquare().setLocation(i.getSquare().x + nextOffX * GRID / 10, i.getSquare().y + nextOffY * GRID / 10);
-			
+
+			setNextDisplay();
+
+			// Sets Conditions to Normal States
 			canMove = true;
 			canHold = true;
 			falling = true;
 			currentFallInt = fallInt;
-			if (landCount == 6) {
-				landCount = 0;
-				Collections.shuffle(next);
-			}
-			else landCount++;
 		}
 		if (timeToNextPiece > -1) timeToNextPiece--;
 
-		//moving lines above cleared lines
-		if (ticks % 50 == 0 && clearCount > 0) {
+		// Applies Gravity on Clear With an Interval
+		if ((clearStartTick - ticks) % 50 == 0 && clearCount > 0) {
 			for (Piece i : landed) if (i.getSquare().y < clearLevel) i.move(0, 1);
 			updateSpaces(false);
 			clearCount--;
 			if (clearCount == 0) canDrop = true;
 		}
 
-		rend.repaint();
+		// Makes Time Pass
+		if (!paused && !gameOver) ticks++;
+
+		// Draws Graphics
+		repaint();
 	}
 
-	public void repaint(Graphics g) {
+	public void paintComponent(Graphics g) {
+		// Draw Backgrounds
 		g.setColor(Color.WHITE);
 		g.fillRect(0, 0, 15 * GRID, 20 * GRID);
 		g.setColor(Color.BLACK);
 		g.fillRect(0, 0, 10 * GRID, 20 * GRID);
 
-		g.drawRect(105 * GRID / 10, 1 * GRID, 5 * GRID, 3 * GRID);
+		// Draw Next and Hold Bounds
+		g.drawRect(105 * GRID / 10, GRID, 5 * GRID, 3 * GRID);
 		g.drawRect(105 * GRID / 10, 5 * GRID, 5 * GRID, 3 * GRID);
 
+		// Draws Text
 		g.setFont(new Font("Impact", Font.PLAIN, 30));
-		g.drawString("NEXT", 105 * GRID / 10, 1 * GRID);
+		g.drawString("NEXT", 105 * GRID / 10, GRID);
 		g.drawString("HOLD", 105 * GRID / 10, 5 * GRID);
 		g.drawString("LINES " + lines, 105 * GRID / 10, 10 * GRID);
 		g.drawString("SINGLES " + singles, 105 * GRID / 10, 12 * GRID);
@@ -140,228 +162,273 @@ public class Tetris implements ActionListener, KeyListener, MouseListener {
 		g.drawString("TRIPLES " + triples, 105 * GRID / 10, 14 * GRID);
 		g.drawString("TETRIS " + tetrises, 105 * GRID / 10, 15 * GRID);
 
+		// Draws All Pieces
 		drawPieces(g, inFall);
 		Color c = g.getColor();
 		drawPieces(g, landed);
 		drawPieces(g, nextDisplay);
 		drawPieces(g, holdDisplay);
 
+		// Makes Ghost Piece
 		g.setColor(c);
 		ghost.clear();
+		// ghost Deep Copies inFall
 		for (Piece i : inFall) {
 			Rectangle rec = i.getSquare();
 			ghost.add(new Rectangle(rec.x, rec.y, rec.width, rec.height));
 		}
-		for (int i = 0;i < 20;i++) {
+		// Moves Ghost Piece Down as Far as Possible
+		int moveCount = -1;
+		for (int i = 1;i < 20;i++) {
 			int count = 0;
-			for (Rectangle j : ghost) {
-				if (j.y / GRID < 18) {
-					if (spaces[j.x / GRID][j.y / GRID + 2]) break;
-					else count++;
-				}
-			}
-			if (count < 4) break;
-			else for (Rectangle k : ghost) k.setLocation(k.x, k.y + GRID);
-		}
-		if (!ghost.isEmpty()) if (!(inFall.get(0).getSquare().y == ghost.get(0).y)) for (Rectangle i : ghost) g.drawRect(i.x, i.y + GRID, GRID - 1, GRID - 1);
 
+			// Counts If All Pieces Can Move Down
+			for (Rectangle j : ghost)
+				if (j.y / GRID + i < 20 && !spaces[j.x / GRID][j.y / GRID + i]) count++;
+
+			if (count == 4) moveCount++;
+			else break;
+		}
+		for (Rectangle i : ghost) i.setLocation(i.x, i.y + moveCount * GRID);
+		// Draws Ghost Piece
+		if (!inFall.isEmpty())
+			if (inFall.get(0).getSquare().y - GRID != ghost.get(0).y)
+				for (Rectangle i : ghost) g.drawRect(i.x, i.y + GRID, GRID - 1, GRID - 1);
+
+		// Draws Messages
 		g.setFont(new Font("Impact", Font.PLAIN, 70));
 		if (paused) g.drawString("PAUSED", 70, F.getHeight() / 2 - 20);
 		if (gameOver) g.drawString("GAME OVER", 20, F.getHeight() / 2 - 20);
 	}
 
-	void tryRotate(int dir) {
-		if (inFall.get(0).getType() != 3 && !paused && falling) {
-			int clearCount = 0;
+	void drawPieces(Graphics g, ArrayList<Piece> pieces) {
+		int pieceInnerSize = GRID - 2 * BORDER;
 
-			for (Piece i : inFall) {
-				Rectangle rec = inFall.get(0).getSquare();
-				Point tar = new Point(dir * -1 * i.getOffsetY() + rec.x, dir * i.getOffsetX() + rec.y);
-
-				try {
-					if (!spaces[tar.x / GRID][tar.y / GRID]) clearCount += 1;
-				} catch (Exception e) {
-					break;
-				}
-			}
-
-			if (clearCount == 4) for (Piece i : inFall) {
-				Rectangle rec = inFall.get(0).getSquare();
-				Point tar = new Point(dir * -1 * i.getOffsetY() + rec.x, dir * i.getOffsetX() + rec.y);
-
-				i.setSquare(new Rectangle(tar.x, tar.y, GRID, GRID));
-				i.setOffsetX(tar.x - rec.x);
-				i.setOffsetY(tar.y - rec.y);
-			}
-		}
-	}
-
-	public void updateSpaces(boolean checkClear) {
-		for (int x = 0;x < 10;x++) for (int y = 0;y < 20;y++) spaces[x][y] = false;
-
-		for (Piece i : landed) {
-			int x = i.getSquare().x / GRID;
-			int y = i.getSquare().y / GRID;
-			if (spaces[x][y]) {
-				checkClear = false;
-				gameOver = true;
-				break;
-			}
-			spaces[x][y] = true;
-		}
-		
-		if (checkClear) {
-			for (int y = 0;y < 20;y++) {
-				int count = 0;
-				for (int x = 0;x < 10;x++) if (spaces[x][y]) count++;
-				else break;
-				if (count == 10) {
-					canDrop = false;
-					for (Iterator<Piece> i = landed.iterator();i.hasNext();) {
-						Piece j = i.next();
-						if (j.getSquare().y == y * GRID) {
-							i.remove();
-						}
-					}
-
-					clearLevel = y * GRID;
-					clearCount++;
-					lines++;
-					if (lines % 5 == 0) {
-						fallInt -= speedUpAmount - (lines / 50);
-						fallInt = Clamp(fallInt, 30, 200);
-						currentFallInt = fallInt;
-						if (lines % 25 == 0) {
-							currentMoveInt--;
-							currentMoveInt = Clamp(currentMoveInt, 70, 80);
-						}
-					}
-				}
-			}
-			switch(clearCount) {
-			case 1: singles++; break;
-			case 2: doubles++; break;
-			case 3: triples++; break;
-			case 4: tetrises++;
-			}
-		}
-	}
-
-	ArrayList<Piece> setPiece(int type) {
-		ArrayList<Piece> temp = new ArrayList<Piece>();
-
-		switch(type) {
-		case 0: //I block
-			temp.add(new Piece(new Rectangle(5 * GRID, 0 * GRID, GRID, GRID), type, 0, 0));
-			temp.add(new Piece(new Rectangle(3 * GRID, 0 * GRID, GRID, GRID), type, -2 * GRID, 0 * GRID));
-			temp.add(new Piece(new Rectangle(4 * GRID, 0 * GRID, GRID, GRID), type, -1 * GRID, 0 * GRID));
-			temp.add(new Piece(new Rectangle(6 * GRID, 0 * GRID, GRID, GRID), type, 1 * GRID, 0 * GRID));
-			break;
-		case 1: //J block
-			temp.add(new Piece(new Rectangle(4 * GRID, 1 * GRID, GRID, GRID), type, 0, 0));
-			temp.add(new Piece(new Rectangle(3 * GRID, 0 * GRID, GRID, GRID), type, -1 * GRID, -1 * GRID));
-			temp.add(new Piece(new Rectangle(3 * GRID, 1 * GRID, GRID, GRID), type, -1 * GRID, 0 * GRID));
-			temp.add(new Piece(new Rectangle(5 * GRID, 1 * GRID, GRID, GRID), type, 1 * GRID, 0 * GRID));
-			break;
-		case 2: //L block
-			temp.add(new Piece(new Rectangle(4 * GRID, 1 * GRID, GRID, GRID), type, 0, 0));
-			temp.add(new Piece(new Rectangle(5 * GRID, 0 * GRID, GRID, GRID), type, 1 * GRID, -1 * GRID));
-			temp.add(new Piece(new Rectangle(3 * GRID, 1 * GRID, GRID, GRID), type, -1 * GRID, 0 * GRID));
-			temp.add(new Piece(new Rectangle(5 * GRID, 1 * GRID, GRID, GRID), type, 1 * GRID, 0 * GRID));
-			break;
-		case 3: //O block
-			temp.add(new Piece(new Rectangle(4 * GRID, 0 * GRID, GRID, GRID), type, 0, 0));
-			temp.add(new Piece(new Rectangle(5 * GRID, 0 * GRID, GRID, GRID), type, 0, 0));
-			temp.add(new Piece(new Rectangle(4 * GRID, 1 * GRID, GRID, GRID), type, 0, 0));
-			temp.add(new Piece(new Rectangle(5 * GRID, 1 * GRID, GRID, GRID), type, 0, 0));
-			break;
-		case 4: //S block
-			temp.add(new Piece(new Rectangle(4 * GRID, 1 * GRID, GRID, GRID), type, 0, 0));
-			temp.add(new Piece(new Rectangle(4 * GRID, 0 * GRID, GRID, GRID), type, 0 * GRID, -1 * GRID));
-			temp.add(new Piece(new Rectangle(5 * GRID, 0 * GRID, GRID, GRID), type, 1 * GRID, -1 * GRID));
-			temp.add(new Piece(new Rectangle(3 * GRID, 1 * GRID, GRID, GRID), type, -1 * GRID, 0 * GRID));
-			break;
-		case 5: //T block
-			temp.add(new Piece(new Rectangle(4 * GRID, 1 * GRID, GRID, GRID), type, 0, 0));
-			temp.add(new Piece(new Rectangle(4 * GRID, 0 * GRID, GRID, GRID), type, 0 * GRID, -1 * GRID));
-			temp.add(new Piece(new Rectangle(3 * GRID, 1 * GRID, GRID, GRID), type, -1 * GRID, 0 * GRID));
-			temp.add(new Piece(new Rectangle(5 * GRID, 1 * GRID, GRID, GRID), type, 1 * GRID, 0 * GRID));
-			break;
-		case 6: //Z block
-			temp.add(new Piece(new Rectangle(4 * GRID, 1 * GRID, GRID, GRID), type, 0, 0));
-			temp.add(new Piece(new Rectangle(3 * GRID, 0 * GRID, GRID, GRID), type, -1 * GRID, -1 * GRID));
-			temp.add(new Piece(new Rectangle(4 * GRID, 0 * GRID, GRID, GRID), type, 0 * GRID, -1 * GRID));
-			temp.add(new Piece(new Rectangle(5 * GRID, 1 * GRID, GRID, GRID), type, 1 * GRID, 0 * GRID));
-			break;
-		}
-		return temp;
-	}
-
-	void holdPiece() {
-		canHold = false;
-		if (holdType == -1) {
-			inFall = setPiece(nextType);
-			nextType = next.get(landCount);
-			holdType = currentType;
-			
-			if (landCount == 6) {
-				landCount = 0;
-				Collections.shuffle(next);
-			}
-			else landCount++;
-			
-			nextDisplay = setPiece(nextType);
-			for (Piece i: nextDisplay) i.getSquare().setLocation(i.getSquare().x + nextOffX * GRID / 10, i.getSquare().y + nextOffY * GRID / 10);
-		} 
-		else {
-			inFall = setPiece(holdType);
-			int holder = currentType;
-			currentType = holdType;
-			holdType = holder;
-		}
-
-		holdDisplay = setPiece(holdType);
-		for (Piece i: holdDisplay) i.getSquare().setLocation(i.getSquare().x + holdOffX * GRID / 10, i.getSquare().y + holdOffY * GRID / 10);
-	}
-
-	void drawPieces(Graphics g, ArrayList<Piece> a) {
-		for (Piece i : a) {
+		for (Piece i : pieces) {
 			Rectangle rec = i.getSquare();
 			g.setColor(Piece.getColor(i.getType()).darker());
 			g.fillRect(rec.x, rec.y, GRID, GRID);
 			g.setColor(Piece.getColor(i.getType()));
-			g.fillRect(rec.x + BORDER, rec.y + BORDER, GRID - 2 * BORDER, GRID - 2 * BORDER);
+			g.fillRect(rec.x + BORDER, rec.y + BORDER, pieceInnerSize, pieceInnerSize);
 		}
+	}
+
+	void tryRotate(int dir) {
+		if (inFall.get(0).getType() != 3 && !paused && falling) {
+			var rotatePoints = new Point[4];
+			int clearCount = 0;
+
+			// Calculates Rotate Points
+			for (int i = 0;i < 4;i++){
+				rotatePoints[i] = new Point(
+						dir * -1 * inFall.get(i).getOffsetY() + inFall.get(0).getSquare().x,
+						dir * inFall.get(i).getOffsetX() + inFall.get(0).getSquare().y);
+			}
+
+			// Counts the Amount that Can Rotate
+			for (int i = 0;i < 4;i++) {
+				try {
+					if (!spaces[rotatePoints[i].x / GRID][rotatePoints[i].y / GRID]) clearCount += 1;
+				} catch (Exception e) {break;}
+			}
+
+			// Moves Pieces to Rotate Points
+			if (clearCount == 4) for (Piece i : inFall) {
+				int ind = inFall.indexOf(i);
+
+				i.setSquare(new Rectangle(rotatePoints[ind].x, rotatePoints[ind].y, GRID, GRID));
+				i.setOffsetX(rotatePoints[ind].x - inFall.get(0).getSquare().x);
+				i.setOffsetY(rotatePoints[ind].y - inFall.get(0).getSquare().y);
+			}
+		}
+	}
+
+	void setNextDisplay(){
+		// Makes New Piece
+		inFall = setPiece(nextType);
+		nextType = nextTypes.get(landCount);
+		heldType = currentType;
+
+		// If All Types Have Been Used
+		if (landCount == 6) {
+			landCount = 0;
+			Collections.shuffle(nextTypes);
+		}
+		else landCount++;
+
+		// Makes New Next Piece Display
+		nextDisplay = setPiece(nextType);
+		for (Piece i: nextDisplay) i.getSquare().setLocation(
+				i.getSquare().x + 80 * GRID / 10, i.getSquare().y + 15 * GRID / 10);
+	}
+
+	void holdPiece() {
+		canHold = false;
+
+		// First Hold
+		if (heldType == -1)  setNextDisplay();
+		else {
+			// Make Held Piece
+			inFall = setPiece(heldType);
+			// Swap Held and Current Types
+			var temp = currentType;
+			currentType = heldType;
+			heldType = temp;
+		}
+
+		// Display Hold Piece
+		holdDisplay = setPiece(heldType);
+		for (Piece i: holdDisplay) i.getSquare().setLocation(
+				i.getSquare().x + 80 * GRID / 10, i.getSquare().y + 55 * GRID / 10);
+	}
+
+	public void updateSpaces(boolean checkClear) {
+		// Sets all spaces to false
+		for (int x = 0;x < 10;x++) for (int y = 0;y < 20;y++) spaces[x][y] = false;
+
+		// Loops Setting spaces to True
+		for (Piece i : landed) {
+			int x = i.getSquare().x / GRID;
+			int y = i.getSquare().y / GRID;
+			// If 2 Pieces in the Same Position
+			if (spaces[x][y]) {
+				checkClear = false;
+				gameOver = true; // GG
+				break;
+			}
+			spaces[x][y] = true;
+		}
+
+		if (checkClear) {
+			// Checks All 20 Rows for Clears
+			for (int y = 0;y < 20;y++) {
+				int count = 0;
+				// Counts Pieces in Row
+				for (int x = 0;x < 10;x++) if (spaces[x][y]) count++;
+				else break;
+
+				// If Full Row
+				if (count == 10) {
+					canDrop = false;
+					// Removes Pieces in Full Row
+					for (Iterator<Piece> i = landed.iterator();i.hasNext();) {
+						Piece j = i.next();
+						if (j.getSquare().y == y * GRID) i.remove();
+					}
+
+					// Sets Lowest Clear Row
+					clearLevel = y * GRID;
+					clearCount++;
+					lines++;
+
+					if (lines % 5 == 0) {
+						// Speeds Up Game
+						fallInt -= speedUpAmount - (lines / 50);
+						fallInt = Math.min(Math.max(fallInt, 30), 500);
+						currentFallInt = fallInt;
+
+						if (lines % 25 == 0) {
+							currentMoveInt--;
+							currentMoveInt = Math.min(Math.max(currentMoveInt, 60), 80);
+						}
+					}
+				}
+			}
+			// Increases Stats
+			switch (clearCount) {
+				case 1 -> singles++;
+				case 2 -> doubles++;
+				case 3 -> triples++;
+				case 4 -> tetrises++;
+			}
+			if (clearCount > 0) clearStartTick = ticks;
+		}
+	}
+
+	// Gets Piece of Type type's Default Values
+	ArrayList<Piece> setPiece(int type) {
+		var temp = new ArrayList<Piece>();
+
+		switch(type) {
+			case 0: //I block
+				temp.add(new Piece(new Rectangle(5 * GRID, 0, GRID, GRID), type, 0, 0));
+				temp.add(new Piece(new Rectangle(3 * GRID, 0, GRID, GRID), type, -2 * GRID, 0));
+				temp.add(new Piece(new Rectangle(4 * GRID, 0, GRID, GRID), type, -GRID, 0));
+				temp.add(new Piece(new Rectangle(6 * GRID, 0, GRID, GRID), type, GRID, 0));
+				break;
+			case 1: //J block
+				temp.add(new Piece(new Rectangle(4 * GRID, GRID, GRID, GRID), type, 0, 0));
+				temp.add(new Piece(new Rectangle(3 * GRID, 0, GRID, GRID), type, -GRID, -GRID));
+				temp.add(new Piece(new Rectangle(3 * GRID, GRID, GRID, GRID), type, -GRID, 0));
+				temp.add(new Piece(new Rectangle(5 * GRID, GRID, GRID, GRID), type, GRID, 0));
+				break;
+			case 2: //L block
+				temp.add(new Piece(new Rectangle(4 * GRID, GRID, GRID, GRID), type, 0, 0));
+				temp.add(new Piece(new Rectangle(5 * GRID, 0, GRID, GRID), type, GRID, -GRID));
+				temp.add(new Piece(new Rectangle(3 * GRID, GRID, GRID, GRID), type, -GRID, 0));
+				temp.add(new Piece(new Rectangle(5 * GRID, GRID, GRID, GRID), type, GRID, 0));
+				break;
+			case 3: //O block
+				temp.add(new Piece(new Rectangle(4 * GRID, 0, GRID, GRID), type, 0, 0));
+				temp.add(new Piece(new Rectangle(5 * GRID, 0, GRID, GRID), type, 0, 0));
+				temp.add(new Piece(new Rectangle(4 * GRID, GRID, GRID, GRID), type, 0, 0));
+				temp.add(new Piece(new Rectangle(5 * GRID, GRID, GRID, GRID), type, 0, 0));
+				break;
+			case 4: //S block
+				temp.add(new Piece(new Rectangle(4 * GRID, GRID, GRID, GRID), type, 0, 0));
+				temp.add(new Piece(new Rectangle(4 * GRID, 0, GRID, GRID), type, 0, -GRID));
+				temp.add(new Piece(new Rectangle(5 * GRID, 0, GRID, GRID), type, GRID, -GRID));
+				temp.add(new Piece(new Rectangle(3 * GRID, GRID, GRID, GRID), type, -GRID, 0));
+				break;
+			case 5: //T block
+				temp.add(new Piece(new Rectangle(4 * GRID, GRID, GRID, GRID), type, 0, 0));
+				temp.add(new Piece(new Rectangle(4 * GRID, 0, GRID, GRID), type, 0, -GRID));
+				temp.add(new Piece(new Rectangle(3 * GRID, GRID, GRID, GRID), type, -GRID, 0));
+				temp.add(new Piece(new Rectangle(5 * GRID, GRID, GRID, GRID), type, GRID, 0));
+				break;
+			case 6: //Z block
+				temp.add(new Piece(new Rectangle(4 * GRID, GRID, GRID, GRID), type, 0, 0));
+				temp.add(new Piece(new Rectangle(3 * GRID, 0, GRID, GRID), type, -GRID, -GRID));
+				temp.add(new Piece(new Rectangle(4 * GRID, 0, GRID, GRID), type, 0, -GRID));
+				temp.add(new Piece(new Rectangle(5 * GRID, GRID, GRID, GRID), type, GRID, 0));
+				break;
+		}
+		return temp;
 	}
 
 	@Override
 	public void mousePressed(MouseEvent e) {
-		if (e.getButton() == MouseEvent.BUTTON1) tryRotate(-1); //rotate left
-		if (e.getButton() == MouseEvent.BUTTON3) tryRotate(1); //rotate right
+		if (e.getButton() == MouseEvent.BUTTON1) tryRotate(-1); // Rotate left
+		if (e.getButton() == MouseEvent.BUTTON3) tryRotate(1); // Rotate right
 	}
 
 	@Override
 	public void keyPressed(KeyEvent e) {
 		if (e.getKeyCode() == KeyEvent.VK_P && !gameOver) paused = !paused;
-		
+
 		if (!paused && !gameOver) {
+			// Move Left
 			if (e.getKeyCode() == KeyEvent.VK_LEFT) {
-				moveStartTick = ticks + 1;
+				moveStartTick = ticks;
 				left = true;
 			}
-			if (e.getKeyCode() == KeyEvent.VK_RIGHT) {
-				moveStartTick = ticks +1;
+			// Move Right
+			else if (e.getKeyCode() == KeyEvent.VK_RIGHT) {
+				moveStartTick = ticks;
 				right = true;
 			}
-			if (e.getKeyCode() == KeyEvent.VK_UP) {
+			// Hard Drop
+			else if (e.getKeyCode() == KeyEvent.VK_UP) {
 				if (canDrop) {
 					currentFallInt = 1;
 					canMove = false;
 					canHold = false;
 				}
 			}
-			if (e.getKeyCode() == KeyEvent.VK_DOWN) currentFallInt = fallInt / 5;
-			if (e.getKeyCode() == KeyEvent.VK_CONTROL && canHold) holdPiece();
+			// Soft Drop
+			else if (e.getKeyCode() == KeyEvent.VK_DOWN) currentFallInt = fallInt / 5;
+			// Hold
+			else if (e.getKeyCode() == KeyEvent.VK_CONTROL && canHold) holdPiece();
 		}
 	}
 
@@ -372,6 +439,7 @@ public class Tetris implements ActionListener, KeyListener, MouseListener {
 		if (e.getKeyCode() == KeyEvent.VK_DOWN) currentFallInt = fallInt;
 	}
 
+	// Extra Implemented Methods from MouseListener and KeyListener
 	@Override
 	public void mouseClicked(MouseEvent e) {}
 	@Override
@@ -382,10 +450,4 @@ public class Tetris implements ActionListener, KeyListener, MouseListener {
 	public void mouseExited(MouseEvent e) {}
 	@Override
 	public void keyTyped(KeyEvent e) {}
-	
-	int Clamp(int value, int min, int max) {
-		if (value < min) value = min;
-		else if (value > max) value = max;
-		return value;
-	}
 }
